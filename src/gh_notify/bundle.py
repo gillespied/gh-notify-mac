@@ -69,12 +69,43 @@ class PythonRuntime:
     path: str
 
 
+def libpython_candidates(
+    home: Path, ldlibrary: str, libdir: str, version: str
+) -> list[Path]:
+    """Places the shared Python library can be, most specific first.
+
+    uv-managed Python keeps a bare filename in `lib/` (`libpython3.13.dylib`).
+    Homebrew's framework build reports `LDLIBRARY` relative to the framework root
+    (`Python.framework/Versions/3.14/Python`), and the real file is `<home>/Python`.
+    """
+    candidates = []
+    if ldlibrary:
+        candidates += [home / "lib" / ldlibrary, home / Path(ldlibrary).name]
+    if libdir:
+        candidates.append(Path(libdir) / f"libpython{version}.dylib")
+    candidates.append(home / "lib" / f"libpython{version}.dylib")
+    return list(dict.fromkeys(candidates))
+
+
+def find_libpython(home: Path, ldlibrary: str, libdir: str, version: str) -> Path:
+    """Return the first existing library, or raise listing every place that was tried."""
+    candidates = libpython_candidates(home, ldlibrary, libdir, version)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    tried = "\n  ".join(str(c) for c in candidates)
+    raise BundleError(f"libpython not found. Looked in:\n  {tried}")
+
+
 def current_runtime() -> PythonRuntime:
     """Describe the interpreter and package locations of the running environment."""
     home = Path(sys.base_prefix)
-    libpython = home / "lib" / (sysconfig.get_config_var("LDLIBRARY") or "")
-    if not libpython.is_file():
-        raise BundleError(f"libpython not found at {libpython}")
+    libpython = find_libpython(
+        home,
+        sysconfig.get_config_var("LDLIBRARY") or "",
+        sysconfig.get_config_var("LIBDIR") or "",
+        sysconfig.get_python_version(),
+    )
     site_packages = sysconfig.get_paths()["purelib"]
     package_root = str(Path(gh_notify.__file__).resolve().parent.parent)
     entries = list(dict.fromkeys([site_packages, package_root]))

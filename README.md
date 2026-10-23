@@ -21,6 +21,10 @@ uv tool install .
 gh-notify install      # builds ~/Applications/GH Notify.app, starts it, and keeps it alive
 ```
 
+`install` works with uv-managed and Homebrew (framework) Python. If your Python is unusual and
+`install` reports that libpython cannot be found, use a uv-managed one:
+`uv tool install . --reinstall --python 3.13 --python-preference only-managed`.
+
 Then allow notifications for **GH Notify** in System Settings > Notifications, and run
 `gh-notify restart`, because a running copy does not pick up a new permission.
 
