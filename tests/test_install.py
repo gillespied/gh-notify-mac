@@ -67,3 +67,45 @@ def test_second_lock_fails_until_first_released(tmp_path):
         instance.acquire(path)
     first.close()
     instance.acquire(path).close()
+
+
+def touch(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+    return path
+
+
+def test_find_libpython_uv_managed_layout(tmp_path):
+    lib = touch(tmp_path / "lib" / "libpython3.13.dylib")
+    found = bundle.find_libpython(
+        tmp_path, "libpython3.13.dylib", str(tmp_path / "lib"), "3.13"
+    )
+    assert found == lib
+
+
+def test_find_libpython_homebrew_framework_layout(tmp_path):
+    # LDLIBRARY is relative to the framework root, so lib/<LDLIBRARY> does not exist.
+    home = tmp_path / "Python.framework" / "Versions" / "3.14"
+    binary = touch(home / "Python")
+    ldlibrary = "Python.framework/Versions/3.14/Python"
+    found = bundle.find_libpython(home, ldlibrary, str(home / "lib"), "3.14")
+    assert found == binary
+
+
+def test_find_libpython_falls_back_to_libdir(tmp_path):
+    libdir = tmp_path / "elsewhere"
+    lib = touch(libdir / "libpython3.14.dylib")
+    assert (
+        bundle.find_libpython(tmp_path / "home", "odd/Name", str(libdir), "3.14") == lib
+    )
+
+
+def test_find_libpython_error_lists_every_place_tried(tmp_path):
+    with pytest.raises(bundle.BundleError) as error:
+        bundle.find_libpython(
+            tmp_path, "Python.framework/Versions/3.14/Python", "", "3.14"
+        )
+    message = str(error.value)
+    assert str(tmp_path / "lib" / "Python.framework/Versions/3.14/Python") in message
+    assert str(tmp_path / "Python") in message
+    assert str(tmp_path / "lib" / "libpython3.14.dylib") in message
